@@ -1,4 +1,5 @@
 import datetime
+import os
 import re
 import sys
 import psutil
@@ -159,61 +160,70 @@ class TimeAxisItem(pg.AxisItem):
 COLLECT_LOOP_CPU_UTIL_DELAY_IN_SEC = 0.1
 COLLECT_LOOP_PING_DELAY_IN_SEC = 5.0
 PING_PLOT_ELEMENT_COUNT = 400
-SERVERS = [
-    Server("194.59.206.166", "D.Cent", "#00FF00", "", COLLECT_LOOP_PING_DELAY_IN_SEC),       #1
-    Server("107.175.134.202", "O:Ashburn", "#008080", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("107.174.63.199", "O:Buffalo, NY", "#3366FF", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("64.44.185.209", "O:Denver, CO", "#FFD700", "",COLLECT_LOOP_PING_DELAY_IN_SEC),
+SERVERS = []
 
-    Server("167.71.7.105", "Amsterdam 1", "#0F5733", "", COLLECT_LOOP_PING_DELAY_IN_SEC),    #1
-    Server("23.94.198.153", "O:Chicago", "#00FFFF", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("23.94.207.160", "O: Buffalo, NY2", "#4169E1", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("64.44.185.231", "O:Denver, CO2", "#FF1493", "",COLLECT_LOOP_PING_DELAY_IN_SEC),
+# Validates whether a line follows the format: STRING;STRING;STRING;Number.
+def is_valid_server_entry(line):
 
-    Server("23.94.101.143", "O:Amsterdam", "#FF450F", "", COLLECT_LOOP_PING_DELAY_IN_SEC),   #1
-    Server("23.94.53.39", "O:Atlanta, GA", "#00CED1", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("72.18.215.113", "O:Kansas City, MO", "#800080", "",COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("107.175.219.234", "O:San Jose, CA", "#ADFF2F", "",COLLECT_LOOP_PING_DELAY_IN_SEC),
+    parts = line.strip().split(';')
+    if len(parts) != 4:
+        return False
+    if not all(isinstance(part, str) for part in parts[:-1]):
+        return False
+    if not parts[-1].isdigit():
+        return False
+    return True
 
-    Server("96.9.214.19", "O:Coventry", "#AF63FF", "", COLLECT_LOOP_PING_DELAY_IN_SEC),      #1
-    Server("192.3.165.26", "O:Piscata, NJ", "#20B2AA", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("192.227.193.172", "O:Dallas, TX", "#9370DB", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-    Server("23.94.73.179", "O:Seattle, WA", "#FF69B4", "",COLLECT_LOOP_PING_DELAY_IN_SEC),
+def add_server(line):
+    print(f"Adding server: {line}")
+    parts = line.strip().split(';')
+    SERVERS.append(Server(parts[0], parts[1], parts[2], "", int(parts[3])))
 
-    #Server("20.223.230.52", "eu-north", "#FF0000", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
+def set_default_servers():
+    default_servers = [
+        "194.59.206.166;D.Cent;#00FF00;5",
+        "107.175.134.202;O:Ashburn;#008080;5",
+        "107.174.63.199;O:Buffalo, NY;#3366FF;5",
+        "64.44.185.209;O:Denver, CO;#FFD700;5",
+        "167.71.7.105;Amsterdam 1;#0F5733;5",
+        "23.94.198.153;O:Chicago;#00FFFF;5",
+        "23.94.207.160;O: Buffalo, NY2;#4169E1;5",
+        "64.44.185.231;O:Denver, CO2;#FF1493;5",
+        "23.94.101.143;O:Amsterdam;#FF450F;5",
+        "23.94.53.39;O:Atlanta, GA;#00CED1;5",
+        "72.18.215.113;O:Kansas City, MO;#800080;5",
+        "107.175.219.234;O:San Jose, CA;#ADFF2F;5",
+        "96.9.214.19;O:Coventry;#AF63FF;5",
+        "192.3.165.26;O:Piscata, NJ;#20B2AA;5",
+        "192.227.193.172;O:Dallas, TX;#9370DB;5",
+        "23.94.73.179;O:Seattle, WA;#FF69B4;5"
+    ]
+    with open('servers.txt', 'w') as f:
+        for server in default_servers:
+            f.write(server + '\n')
+    print("Default servers set.")
 
+def process_servers_file():
+    try:
+        if os.path.exists('servers.txt'):
+            with open('servers.txt', 'r') as f:
+                for line in f:
+                    if is_valid_server_entry(line):
+                        add_server(line)
+                    else:
+                        print(f"Invalid server entry: {line}")
+        else:
+            set_default_servers()
+    except Exception as e:
+        print(f"Encountered an error: {e}")
+        set_default_servers()
 
-    #Server("google.com", "", "#FF5733", "", COLLECT_LOOP_PING_DELAY_IN_SEC),
-
-
-#FF6347 (Tomato)
-#FF4500 (Orange Red)
-#FF5733 (Vivid Orange)
-#00FF00 (Lime Green)
-
-#3366FF (Royal Blue)
-#4169E1 (Royal Blue)
-#800080 (Purple)
-#9370DB (Medium Purple)
-
-#008080 (Teal)
-#00FFFF (Cyan)
-#00CED1 (Dark Turquoise)
-#20B2AA (Light Sea Green)
-
-#FFD700 (Gold)
-#FF1493 (Deep Pink)
-#ADFF2F (Green Yellow)
-#FF69B4 (Hot Pink)
-
-
-]
 
 
 class LiveGraph(QtWidgets.QWidget):
     def __init__(self):
+        process_servers_file()
         self.collect_loop_time_since_last_ping_in_sec = 0.0
-
         super().__init__()
         # Set up the window
         self.setWindowTitle('StatMonitor')
@@ -233,9 +243,7 @@ class LiveGraph(QtWidgets.QWidget):
         self.ping_plot.setAxisItems({'bottom': TimeAxisItem(orientation='bottom')})
         legend = self.ping_plot.addLegend()
         self.setColumnCount(legend, 4)
-        #brush = QtGui.QBrush(
-        #    QtGui.QColor(50, 50, 50, 100))  # RGBA: (0, 0, 0) is black, 100 is the alpha (transparency) value
-        #legend.setBrush(brush)
+
         for server in SERVERS:
             server.curve = self.ping_plot.plot(pen=pg.mkPen(server.color), name=server.description)
         splitter.addWidget(self.ping_plot)
@@ -280,6 +288,7 @@ class LiveGraph(QtWidgets.QWidget):
         self.collect_cpu_util_thread = threading.Thread(target=self.collect_cpu_util_data)
         self.collect_cpu_util_thread.daemon = True
         self.collect_cpu_util_thread.start()
+
 
     def fast_ui_updates(self):
         # toggle visibility
@@ -393,6 +402,7 @@ def handle_exit():
     print("Shutdown signal received")
     for server in SERVERS:
         server.writer.flush()
+    #sys.exit()
 
 
 if __name__ == '__main__':
