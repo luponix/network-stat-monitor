@@ -87,7 +87,7 @@ class Server:
                 if lost_packets != 0:
                     loss_rate = lost_packets / self.amt_of_pings
 
-                t = time.strftime("%D %T", time.gmtime(time.time()))
+                #t = time.strftime("%D %T", time.gmtime(time.time()))
                 # print(f"{t}     avg: {avg_ping}ms   variance: {max_ping-min_ping}ms   loss: {str(loss_rate*100)}%")
 
                 if avg_ping > ping_plot_y_max:
