@@ -1,166 +1,27 @@
 import datetime
 import os
-import re
 import sys
 import psutil
-import subprocess
 import threading
 import safe_exit
 from PyQt5 import QtWidgets, QtGui, QtCore
 import pyqtgraph as pg
 import time
-import platform
-
-changed_plot_y_max = 0
-time_changed_y_max = 0
-ping_plot_y_max = 0
-
-
-class Server:
-    def __init__(self, address, description, color, path_logfile, ping_delay, amt_of_pings=5):
-        self.address = address
-        self.description = description
-        self.color = color
-        self.time_data = []
-        self.ping_data = []
-        self.loss_data = []
-        self.jitter_data = []
-        self.curve = None
-        self.jitter_curve = None
-        self.packetloss_curve = None
-        self.ping_delay = ping_delay
-        self.amt_of_pings = amt_of_pings
-        self.path_logfile = path_logfile
-        self.writer = BufferedWriter(address.replace(".", "_")+"_log.txt")
-        self.network_ping_thread = threading.Thread(target=self.collect_network_pings_data)
-        self.network_ping_thread.daemon = True
-        self.network_ping_thread.start()
-
-    def get_maximum_in_data(self):
-        maximum = 0
-        for i in range(len(self.ping_data)):
-            if self.ping_data[i] > maximum:
-                maximum = self.ping_data[i]
-            if self.loss_data[i] > maximum:
-                maximum = self.loss_data[i]
-        return maximum
-
-    def collect_network_pings_data(self):
-        global ping_plot_y_max
-        global changed_plot_y_max
-        while True:
-            time_in_sec = time.time()
-            try:  # "-c", self.amt_of_pings
-                # obtain data
-                output = None
-                if platform.system().lower() == 'windows':
-                    output = subprocess.run(["ping", "-n", str(self.amt_of_pings), self.address], capture_output=True,
-                                            text=True,
-                                            universal_newlines=True,
-                                            creationflags=subprocess.CREATE_NO_WINDOW,
-                                            encoding='latin-1')
-                else:
-                    output = subprocess.run(["ping", "-n", str(self.amt_of_pings), self.address], capture_output=True,
-                                            text=True,
-                                            universal_newlines=True,
-                                            encoding='latin-1')
-
-                # extract data
-                min_ping = -1
-                max_ping = -1
-                avg_ping = -1
-                lost_packets = 0
-                loss_rate = 0.0
-                for line in output.stdout.split("\n"):
-                    # print(line)
-                    if "Lost =" in line:
-                        lost_packets = int(line.split("Lost = ")[-1].split(" ")[0])
-                    elif "Verloren =" in line:
-                        lost_packets = int(line.split("Verloren = ")[-1].split(" ")[0])
-                    elif "Minimum" in line:
-                        values = re.findall(r'\d+', line)
-                        values = list(map(int, values))
-                        if len(values) == 3:
-                            min_ping = values[0]
-                            max_ping = values[1]
-                            avg_ping = values[2]
-
-                if lost_packets != 0:
-                    loss_rate = lost_packets / self.amt_of_pings
-
-                #t = time.strftime("%D %T", time.gmtime(time.time()))
-                # print(f"{t}     avg: {avg_ping}ms   variance: {max_ping-min_ping}ms   loss: {str(loss_rate*100)}%")
-
-                if avg_ping > ping_plot_y_max:
-                    ping_plot_y_max = avg_ping + 10
-                    changed_plot_y_max = 1
-                    time_changed_y_max = time_in_sec
-
-                self.time_data.append(time_in_sec)
-                self.ping_data.append(avg_ping)
-                self.jitter_data.append(max_ping - min_ping)
-                self.loss_data.append(loss_rate * 100)
-
-                self.writer.write(f"{time_in_sec};{avg_ping};{min_ping};{max_ping};{loss_rate}")
-
-                if len(self.ping_data) > PING_PLOT_ELEMENT_COUNT:
-                    self.time_data.pop(0)
-                    self.ping_data.pop(0)
-                    self.jitter_data.pop(0)
-                    self.loss_data.pop(0)
-
-            except subprocess.CalledProcessError as e:
-                print(f"Ping failed with error: {e.output}")
-
-            time_taken = time.time() - time_in_sec
-            time_to_sleep = self.ping_delay
-            if time_taken > self.ping_delay:
-                time_to_sleep = 0
-            else:
-                time_to_sleep = self.ping_delay - time_taken
-            # print(f"time taken: {time_taken}    time to sleep: {time_to_sleep}")
-            time.sleep(time_to_sleep)
-
-
-class BufferedWriter:
-    def __init__(self, filename, buffer_size=1024 * 1024):
-        self.filename = filename
-        self.buffer_size = buffer_size
-        self.buffer = []
-        self.current_buffer_size = 0
-
-    def write(self, line):
-        line += '\n'
-        self.buffer.append(line)
-        self.current_buffer_size += len(line)
-        if self.current_buffer_size >= self.buffer_size:
-            self.flush()
-
-    def flush(self):
-        print("[Buffered Writer] flushed "+self.filename)
-        with open(self.filename, 'a') as file:
-            file.write(''.join(self.buffer))
-        self.buffer = []
-        self.current_buffer_size = 0
-
-    def close(self):
-        if self.buffer:
-            self.flush()
-
-
-def format_time(seconds):
-    return datetime.datetime.fromtimestamp(seconds).strftime('%H:%M:%S')
-
-class TimeAxisItem(pg.AxisItem):
-    def tickStrings(self, values, scale, spacing):
-        return [format_time(value) for value in values]
-
-
+from Server import Server
 
 COLLECT_LOOP_CPU_UTIL_DELAY_IN_SEC = 0.1
 COLLECT_LOOP_PING_DELAY_IN_SEC = 5.0
 PING_PLOT_ELEMENT_COUNT = 400
 SERVERS = []
+
+def format_time(seconds):
+    return datetime.datetime.fromtimestamp(seconds).strftime('%H:%M:%S')
+
+
+class TimeAxisItem(pg.AxisItem):
+    def tickStrings(self, values, scale, spacing):
+        return [format_time(value) for value in values]
+
 
 # Validates whether a line follows the format: STRING;STRING;STRING;Number.
 def is_valid_server_entry(line):
@@ -174,34 +35,22 @@ def is_valid_server_entry(line):
         return False
     return True
 
+
 def add_server(line):
     print(f"Adding server: {line}")
     parts = line.strip().split(';')
-    SERVERS.append(Server(parts[0], parts[1], parts[2], "", int(parts[3])))
+    SERVERS.append(Server(parts[0], parts[1], parts[2], "", int(parts[3]), PING_PLOT_ELEMENT_COUNT))
+
 
 def set_default_servers():
     default_servers = [
-        "194.59.206.166;D.Cent;#00FF00;5",
-        "107.175.134.202;O:Ashburn;#008080;5",
-        "107.174.63.199;O:Buffalo, NY;#3366FF;5",
-        "64.44.185.209;O:Denver, CO;#FFD700;5",
-        "167.71.7.105;Amsterdam 1;#0F5733;5",
-        "23.94.198.153;O:Chicago;#00FFFF;5",
-        "23.94.207.160;O: Buffalo, NY2;#4169E1;5",
-        "64.44.185.231;O:Denver, CO2;#FF1493;5",
-        "23.94.101.143;O:Amsterdam;#FF450F;5",
-        "23.94.53.39;O:Atlanta, GA;#00CED1;5",
-        "72.18.215.113;O:Kansas City, MO;#800080;5",
-        "107.175.219.234;O:San Jose, CA;#ADFF2F;5",
-        "96.9.214.19;O:Coventry;#AF63FF;5",
-        "192.3.165.26;O:Piscata, NJ;#20B2AA;5",
-        "192.227.193.172;O:Dallas, TX;#9370DB;5",
-        "23.94.73.179;O:Seattle, WA;#FF69B4;5"
+        "google.com;google.com;#FF0000;5",
     ]
     with open('servers.txt', 'w') as f:
         for server in default_servers:
             f.write(server + '\n')
     print("Default servers set.")
+
 
 def process_servers_file():
     try:
@@ -219,23 +68,18 @@ def process_servers_file():
         set_default_servers()
 
 
-
 class LiveGraph(QtWidgets.QWidget):
     def __init__(self):
         process_servers_file()
-        self.collect_loop_time_since_last_ping_in_sec = 0.0
         super().__init__()
-        # Set up the window
         self.setWindowTitle('StatMonitor')
         self.setGeometry(100, 100, 800, 600)
         self.setStyleSheet("background-color: black;")
 
-        # Create a vertical splitter
+        # Create a vertical splitter to attach all graphs to
         splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.setLayout(QtWidgets.QVBoxLayout())
         self.layout().addWidget(splitter)
-
-
 
         # Set up the Ping line graph
         self.ping_plot = pg.PlotWidget(title="Ping (ms)")
@@ -243,18 +87,19 @@ class LiveGraph(QtWidgets.QWidget):
         self.ping_plot.setAxisItems({'bottom': TimeAxisItem(orientation='bottom')})
         legend = self.ping_plot.addLegend()
         self.setColumnCount(legend, 4)
-
+        # Add the ping curves to the ping plot
         for server in SERVERS:
             server.curve = self.ping_plot.plot(pen=pg.mkPen(server.color), name=server.description)
         splitter.addWidget(self.ping_plot)
 
-        # Add two more plots vertically
+        # Add the jitter plot
         self.jitter_plot = pg.PlotWidget(title="Ping Variance (ms)")
         self.jitter_plot.setAxisItems({'bottom': TimeAxisItem(orientation='bottom')})
         for server in SERVERS:
             server.jitter_curve = self.jitter_plot.plot(pen=pg.mkPen(server.color), name=server.description)
         splitter.addWidget(self.jitter_plot)
 
+        # Add the packetloss plot
         self.packetloss_plot = pg.PlotWidget(title="Packetloss (%)")
         self.packetloss_plot.setAxisItems({'bottom': TimeAxisItem(orientation='bottom')})
         self.packetloss_plot.setYRange(0, 101)
@@ -262,7 +107,7 @@ class LiveGraph(QtWidgets.QWidget):
             server.packetloss_curve = self.packetloss_plot.plot(pen=pg.mkPen(server.color), name=server.description)
         splitter.addWidget(self.packetloss_plot)
 
-        # Set up the CPU bar graph
+        # Add the cpu utilization plot
         self.cpu_bar_graph = pg.BarGraphItem(x=[], height=[], width=0.6, brush='g')
         self.cpu_plot = pg.PlotWidget(title="CPU Utilization per Core")
         self.cpu_plot.setYRange(0, 110)
@@ -270,12 +115,13 @@ class LiveGraph(QtWidgets.QWidget):
         self.cpu_plot.addItem(self.cpu_bar_graph)
         splitter.addWidget(self.cpu_plot)
 
+        # Set the default Sizing for the different plots attached to the splitter
         splitter.setSizes([900, 500, 320, 300])
 
         # Data storage
         self.cpu_data = [] * psutil.cpu_count()
 
-        # Timers for GUI updates
+        # 10 fps updates for fast updates to the ui like the rolling average of the cpu utilization
         self.cpu_timer = QtCore.QTimer()
         self.cpu_timer.timeout.connect(self.fast_ui_updates)
         self.cpu_timer.start(100)
@@ -289,8 +135,9 @@ class LiveGraph(QtWidgets.QWidget):
         self.collect_cpu_util_thread.daemon = True
         self.collect_cpu_util_thread.start()
 
-
     def fast_ui_updates(self):
+        self.update_cpu_graph()
+
         # toggle visibility
         changed = False
         for server in SERVERS:
@@ -300,8 +147,6 @@ class LiveGraph(QtWidgets.QWidget):
                 changed = True
         if changed:
             self.update_graphs()
-
-        self.update_cpu_graph()
 
     def update_cpu_graph(self):
         if self.cpu_data:
@@ -379,7 +224,6 @@ class LiveGraph(QtWidgets.QWidget):
         for sample, label in legend.items:
             _addItemToLayout(legend, sample, label)
         legend.updateSize()
-
 
     def collect_cpu_util_data(self):
         initialised = 0
