@@ -15,7 +15,10 @@ PING_PLOT_ELEMENT_COUNT = 400
 SERVERS = []
 
 def format_time(seconds):
-    return datetime.datetime.fromtimestamp(seconds).strftime('%H:%M:%S')
+    if seconds > 0:
+        return datetime.datetime.fromtimestamp(seconds).strftime('%H:%M:%S')
+    else:
+        return str(seconds)
 
 
 class TimeAxisItem(pg.AxisItem):
@@ -172,9 +175,14 @@ class LiveGraph(QtWidgets.QWidget):
             if server.loss_data:
                 server.packetloss_curve.setData(x=server.time_data, y=server.loss_data)
         if len(x_data) > 0:
-            self.ping_plot.setXRange(x_data[0], x_data[0] + 1800)
-            self.jitter_plot.setXRange(x_data[0], x_data[0] + 1800)
-            self.packetloss_plot.setXRange(x_data[0], x_data[0] + 1800)
+            timestamp = 0.0
+            if len(x_data) < PING_PLOT_ELEMENT_COUNT:
+                timestamp = x_data[0] + 1600
+            else:
+                timestamp = x_data[len(x_data) - 1]
+            self.ping_plot.setXRange(x_data[0], timestamp)
+            self.jitter_plot.setXRange(x_data[0], timestamp)
+            self.packetloss_plot.setXRange(x_data[0], timestamp)
 
         ###### PING PLOT ######
         # Adjust Y maximum depending on what graphs are visible

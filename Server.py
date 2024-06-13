@@ -37,8 +37,6 @@ class Server:
         return maximum
 
     def collect_network_pings_data(self):
-        global ping_plot_y_max
-        global changed_plot_y_max
         while True:
             time_in_sec = time.time()
             try:  # "-c", self.amt_of_pings
@@ -63,7 +61,7 @@ class Server:
                 lost_packets = 0
                 loss_rate = 0.0
                 for line in output.stdout.split("\n"):
-                    # print(line)
+                    #print(line)
                     if "Lost =" in line:
                         lost_packets = int(line.split("Lost = ")[-1].split(" ")[0])
                     elif "Verloren =" in line:
@@ -78,7 +76,7 @@ class Server:
 
                 if lost_packets != 0:
                     loss_rate = lost_packets / self.amt_of_pings
-
+                #print(lost_packets)
 
                 self.time_data.append(time_in_sec)
                 self.ping_data.append(avg_ping)
@@ -86,6 +84,9 @@ class Server:
                 self.loss_data.append(loss_rate * 100)
 
                 self.writer.write(f"{time_in_sec};{avg_ping};{min_ping};{max_ping};{loss_rate}")
+
+                #if self.address == "23.94.198.153":
+                 #   print(len(self.ping_data))
 
                 if len(self.ping_data) > self.element_count:
                     self.time_data.pop(0)
