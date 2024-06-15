@@ -5,11 +5,14 @@ import time
 from datetime import datetime, timezone
 import pyqtgraph as pg
 from PyQt5 import QtGui, QtCore
-from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget, QPushButton, QLabel, QMainWindow, QGridLayout, QFrame
+from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtGui import QFont, QBrush, QColor
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget, QPushButton, QLabel, QMainWindow, QGridLayout, QFrame, \
+    QGraphicsRectItem
 import numpy as np
 
 
-directory = ""#'./path/to/directory'
+directory = ""
 pattern = re.compile(r'.*_log\.txt$')
 
 selected_log = -1
@@ -30,6 +33,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
+
+        self.info_label = QLabel("sadasda")
+        self.info_label.setFont(QtGui.QFont('Arial', 16))
+        self.info_label.setAlignment(QtCore.Qt.AlignRight)
+        self.info_label.setStyleSheet("color: white; background-color: black;")
 
         self.file_label = QLabel("")
         self.file_label.setFont(QtGui.QFont('Arial', 16))
@@ -63,37 +71,61 @@ class MainWindow(QMainWindow):
 
         grid_layout = QGridLayout()
 
-
-        grid_layout.addWidget(self.file_label, 0, 0)
-        grid_layout.addWidget(self.time_label, 0, 1)
+        grid_layout.addWidget(self.info_label, 0, 1)
+        grid_layout.addWidget(self.file_label, 1, 0)
+        grid_layout.addWidget(self.time_label, 1, 1)
 
         line1 = QFrame()
         line1.setFrameShape(QFrame.HLine)
         line1.setFrameShadow(QFrame.Sunken)
         line1.setStyleSheet("color: white; background-color: grey;")  # Change color to white
-        grid_layout.addWidget(line1, 1, 0, 1, 2)
+        grid_layout.addWidget(line1, 2, 0, 1, 2)
 
         self.previous_month_button = QPushButton("previous month")
         self.previous_month_button.setStyleSheet("background-color: grey; color: white;")
-        grid_layout.addWidget(self.previous_month_button, 2, 0)
+        grid_layout.addWidget(self.previous_month_button, 3, 0)
 
         self.next_month_button = QPushButton("next month")
         self.next_month_button.setStyleSheet("background-color: grey; color: white;")
-        grid_layout.addWidget(self.next_month_button, 2, 1)
+        grid_layout.addWidget(self.next_month_button, 3, 1)
 
         self.last_log_button = QPushButton("last log")
         self.last_log_button.setStyleSheet("background-color: grey; color: white;")
-        grid_layout.addWidget(self.last_log_button, 3, 0)
+        grid_layout.addWidget(self.last_log_button, 4, 0)
 
         self.next_log_button = QPushButton("next log")
         self.next_log_button.setStyleSheet("background-color: grey; color: white;")
-        grid_layout.addWidget(self.next_log_button, 3, 1)
+        grid_layout.addWidget(self.next_log_button, 4, 1)
         layout.addLayout(grid_layout)
 
         self.next_month_button.clicked.connect(self.draw_next_month)
         self.previous_month_button.clicked.connect(self.draw_previous_month)
         self.next_log_button.clicked.connect(self.get_next_log)
         self.last_log_button.clicked.connect(self.get_previous_log)
+        self.image_item.getViewBox().scene().sigMouseMoved.connect(self.onMouseMoved)
+
+    def onMouseMoved(self, pos):
+        global selected_log, selected_year, selected_month
+        mouse_point = self.image_item.mapFromScene(pos)
+        hovered_hour = int(mouse_point.x())
+        hovered_day = int(mouse_point.y())
+        #print(f"{str(x)} {str(y)}")
+        if hovered_hour == -1 or hovered_day == -1:
+            self.info_label.setText("")
+            return
+
+        if selected_log in logs and selected_year in logs[selected_log].years:
+            if hovered_day in logs[selected_log].years[selected_year].months[selected_month].days and hovered_hour in logs[selected_log].years[selected_year].months[selected_month].days[hovered_day].hours:
+                hour_data = logs[selected_log].years[selected_year].months[selected_month].days[hovered_day].hours[hovered_hour]
+                score = logs[selected_log].years[selected_year].months[selected_month].score_hour(logs[selected_log].years[selected_year].months[selected_month].days[hovered_day].hours[hovered_hour]) * -1
+                self.info_label.setText(f"jitter: {hour_data.average_jitter:<3.1f}  loss: {hour_data.average_packetloss_rate:<3.3f}  score: {score:<3.0f}")
+            else:
+                self.info_label.setText("")
+
+        else:
+            self.info_label.setText("")
+
+
 
     def get_next_log(self):
         global selected_log, selected_year
@@ -121,7 +153,7 @@ class MainWindow(QMainWindow):
             next_index = (current_index + 1) % len(keys)
             return keys[next_index]
         except ValueError:
-            return None  # Current key not found
+            return None
 
     def get_previous_key(self):
         global selected_log
@@ -131,7 +163,7 @@ class MainWindow(QMainWindow):
             previous_index = (current_index - 1) % len(keys)
             return keys[previous_index]
         except ValueError:
-            return None  # Current key not found
+            return None
 
     def set_latest_data_point_as_selection(self):
         global selected_log, selected_year, selected_month, logs
@@ -214,6 +246,7 @@ class MainWindow(QMainWindow):
             label_text = ip_name_dict[logs[selected_log].filename]
         self.file_label.setText(label_text)
         self.time_label.setText(f"{str(selected_year)} {self.month_number_to_name(selected_month)}")
+        self.info_label.setText("")
 
 
 logs = {}
@@ -228,18 +261,18 @@ class Year:
     def __init__(self, year):
         self.year = year
         self.months = {
-            1:Month(31),
-            2:Month(29 if self.is_leap_year() else 28),
-            3:Month(31),
-            4:Month(30),
-            5:Month(31),
-            6:Month(30),
-            7:Month(31),
-            8:Month(31),
-            9:Month(30),
-            10:Month(31),
-            11:Month(30),
-            12:Month(31)
+            1: Month(31),
+            2: Month(29 if self.is_leap_year() else 28),
+            3: Month(31),
+            4: Month(30),
+            5: Month(31),
+            6: Month(30),
+            7: Month(31),
+            8: Month(31),
+            9: Month(30),
+            10: Month(31),
+            11: Month(30),
+            12: Month(31)
         }
 
     def is_leap_year(self):
@@ -263,6 +296,7 @@ class Month:
                 elif multiplier == 0:
                     data[j, i] = [0, 255, 0, 255]
                 else:
+                    multiplier = min(100, multiplier)
                     data[j, i] = [multiplier * 2.55, 220 - (2.2 * multiplier), 0, 255]
         self.image_data = data
 
@@ -273,7 +307,7 @@ class Month:
             return -1
         if hour.average_packetloss_rate == 0 and hour.average_jitter < 1.0:
             return 0
-        return min((hour.average_jitter / 12) * 100 + (hour.average_packetloss_rate / 0.05) * 100, 100)   # return min((hour.average_jitter / 20) * 100 + (hour.average_packetloss_rate / 0.1) * 100, 100)
+        return ((hour.average_jitter / 12) * 100) + ((hour.average_packetloss_rate / 0.05) * 100)   # return min((hour.average_jitter / 20) * 100 + (hour.average_packetloss_rate / 0.1) * 100, 100)
 
 class Day:
     def __init__(self):
@@ -357,21 +391,12 @@ def parse_servertxt_file(file_path):
     try:
         with open(file_path, 'r') as file:
             for line in file:
-                # Strip any leading/trailing whitespace (including newline characters)
                 line = line.strip()
-
-                # Split the line by the semicolon character
                 parts = line.split(';')
-
-                # Check if the line has at least two parts
                 if len(parts) >= 2:
                     ip_part = parts[0]
                     name_part = parts[1]
-
-                    # Replace dots in the IP part with underscores
                     processed_ip = ip_part.replace('.', '_') + '_log.txt'
-
-                    # Add the processed IP and name to the dictionary
                     result_dict[processed_ip] = name_part
                 else:
                     print(f"Skipping malformed line: {line}")
