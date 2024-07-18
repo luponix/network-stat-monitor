@@ -357,7 +357,7 @@ def load_log(filepath):
                         and datetime_of_timestamp.hour == datetime_of_packet.hour):
 
                         average_packetloss_rate = accumulated_packetloss / amount_of_data_points
-                        average_jitter = accumulated_jitter / (amount_of_data_points - invalid_data_points)
+                        average_jitter = accumulated_jitter / max(1, (amount_of_data_points - invalid_data_points))
                         add_processed_hour(filepath, datetime_of_timestamp, average_jitter, average_packetloss_rate, amount_of_data_points)
                         amount_of_data_points = 0
                         accumulated_jitter = 0
