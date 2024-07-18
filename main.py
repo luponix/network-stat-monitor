@@ -119,7 +119,7 @@ class LiveGraph(QtWidgets.QWidget):
         splitter.addWidget(self.cpu_plot)
 
         # Set the default Sizing for the different plots attached to the splitter
-        splitter.setSizes([900, 500, 320, 300])
+        splitter.setSizes([900, 320, 260, 0])
 
         # Data storage
         self.cpu_data = [] * psutil.cpu_count()
