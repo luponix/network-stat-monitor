@@ -22,7 +22,7 @@ class Server:
         self.amt_of_pings = amt_of_pings
         self.path_logfile = path_logfile
         self.element_count = element_count
-        self.writer = BufferedWriter(address.replace(".", "_")+"_log.txt")
+        self.writer = BufferedWriter(address.replace(".", "_")+"_log.txt", 4 * 1024) #4kB should lead to roughly one save per 10 min
         self.network_ping_thread = threading.Thread(target=self.collect_network_pings_data)
         self.network_ping_thread.daemon = True
         self.network_ping_thread.start()
