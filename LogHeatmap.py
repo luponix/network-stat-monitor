@@ -171,6 +171,9 @@ class MainWindow(QMainWindow):
         for key in logs[selected_log].years.keys():
             if key > latest_year:
                 latest_year = key
+        # if there is no available data
+        if latest_year is -1:
+            return
 
         latest_month_with_data = 0
         for key in logs[selected_log].years[latest_year].months.keys():
