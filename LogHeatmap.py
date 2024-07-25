@@ -3,12 +3,14 @@ import re
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
+
 import pyqtgraph as pg
 from PyQt5 import QtGui, QtCore
 from PyQt5.QtCore import Qt, QRectF
-from PyQt5.QtGui import QFont, QBrush, QColor
+from PyQt5.QtGui import QFont, QBrush, QColor, QIcon, QScreen
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QWidget, QPushButton, QLabel, QMainWindow, QGridLayout, QFrame, \
-    QGraphicsRectItem
+    QGraphicsRectItem, QAction, QToolBar
 import numpy as np
 
 
@@ -104,6 +106,19 @@ class MainWindow(QMainWindow):
         self.last_log_button.clicked.connect(self.get_previous_log)
         self.image_item.getViewBox().scene().sigMouseMoved.connect(self.onMouseMoved)
 
+        # SHORTCUTS:
+        # ALT + C saves the current view as an image
+        save_action = QAction("Save Screen", self)
+        save_action.triggered.connect(self.saveScreenshot)
+        save_action.setShortcut(Qt.ALT + Qt.Key_C)
+        self.addAction(save_action)
+
+    def saveScreenshot(self):
+        if selected_log != -1 and selected_year != -1 and selected_month != -1:
+            filepath = os.path.join(directory, f"{Path(logs[selected_log].filename).stem}-{selected_year}-{selected_month}.png")
+            screen = QScreen.grabWindow(QApplication.primaryScreen(), self.winId())
+            screen.save(filepath, 'png')
+
     def onMouseMoved(self, pos):
         global selected_log, selected_year, selected_month
         mouse_point = self.image_item.mapFromScene(pos)
@@ -172,7 +187,7 @@ class MainWindow(QMainWindow):
             if key > latest_year:
                 latest_year = key
         # if there is no available data
-        if latest_year is -1:
+        if latest_year == -1:
             return
 
         latest_month_with_data = 0
